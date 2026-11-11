@@ -7,3 +7,53 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+
+## Comandos
+
+Todos rodam no contêiner `web`, a partir da raiz do repositório:
+
+```bash
+docker compose -f compose.yaml exec web <comando>
+```
+
+| Comando | O que faz |
+| --- | --- |
+| `pnpm dev --hostname 0.0.0.0` | Sobe o servidor de desenvolvimento (`http://localhost:3000`) |
+| `pnpm lint` | ESLint com as regras do `eslint-config-next` |
+| `pnpm exec tsc --noEmit` | Checagem de tipos |
+| `pnpm build` | Compila a aplicação para produção |
+
+## Verificação completa
+
+1. `pnpm lint`
+2. `pnpm exec tsc --noEmit`
+3. `pnpm build`
+
+## Server Components
+
+Todo componente nasce como Server Component. O `"use client"` precisa de um motivo: estado ou efeito, manipulador de evento, API do navegador ou hook que só existe no cliente. Buscar dados, ler cookies, formatar valores e montar layout não são motivo.
+
+## Estrutura de pastas
+
+O código fica em `src/`.
+
+```
+src/
+  app/          Server Components, páginas, layouts e rotas da aplicação; o CSS global fica em `globals.css`.
+    queries/    Arquivos de consultas (queries) da aplicação.
+    actions/    Arquivos de ações do servidor (Server Actions) da aplicação.
+    components/ Componentes reutilizáveis da aplicação.
+    hooks/      Hooks personalizados da aplicação.
+    utils/      Funções utilitárias da aplicação.
+    services/   Arquivos de serviços da aplicação.
+public/         Arquivos estáticos, como imagens e fontes (fora de `src/`).
+```
+
+## API Externas
+
+A comunicação com APIs será feita através do `fetch`, mas, não deve ser feita diretamente nos componentes ou Server Actions. Em vez disto, crie serviços http dedicados na pasta `app/services/` e utilize-os nos componentes ou Server Actions.
+
+
+
+
