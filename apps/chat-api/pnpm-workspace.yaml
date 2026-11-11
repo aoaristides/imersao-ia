@@ -1,0 +1,7 @@
+# Store compartilhado com o web, na raiz do repositório (docs/lld.md, seção 10).
+storeDir: ../../.pnpm-store
+# Binários nativos para o host (macOS ou WSL) e para o contêiner Linux, no mesmo node_modules.
+supportedArchitectures:
+  os: [darwin, linux]
+  cpu: [arm64, x64]
+  libc: [glibc]

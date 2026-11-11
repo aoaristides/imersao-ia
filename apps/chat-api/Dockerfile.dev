@@ -1,0 +1,14 @@
+# Imagem de desenvolvimento: sem dependências. O repositório é montado em
+# /home/node/app pelo compose.yaml da raiz (docs/lld.md, seção 10).
+FROM node:26-slim
+
+# O Node 25+ não traz o corepack; ele garante o pnpm do `packageManager`.
+RUN npm install -g corepack@0.36.0 && corepack enable
+
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+USER node
+
+# Instala e mantém o contêiner de pé mesmo se o install falhar (erro em `docker compose logs`).
+# confirm-modules-purge=false: refaz o node_modules sem perguntar quando ele veio de outro store.
+CMD ["sh", "-c", "pnpm install --frozen-lockfile --config.confirm-modules-purge=false; exec sleep infinity"]

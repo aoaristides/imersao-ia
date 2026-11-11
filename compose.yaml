@@ -1,0 +1,62 @@
+# Ambiente de desenvolvimento local. Detalhes e motivos: docs/lld.md, seção 10.
+# Os apps não sobem sozinhos: o contêiner instala as dependências e fica de pé.
+#   docker compose exec chat-api pnpm start:dev
+#   docker compose exec web pnpm dev
+name: fullcycle-slack-ia
+
+x-node-app: &node-app
+  init: true
+  volumes:
+    - .:/home/node/app
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  web:
+    <<: *node-app
+    build:
+      context: apps/web
+      dockerfile: Dockerfile.dev
+    working_dir: /home/node/app/apps/web
+    ports:
+      - "3000:3000"
+    environment:
+      CHAT_API_URL: http://chat-api:3000
+      SESSION_COOKIE_DOMAIN: ""
+      SESSION_COOKIE_SECURE: "false"
+
+  chat-api:
+    <<: *node-app
+    build:
+      context: apps/chat-api
+      dockerfile: Dockerfile.dev
+    working_dir: /home/node/app/apps/chat-api
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+      DATABASE_URL: postgres://chat:chat@postgres:5432/chat
+      WEB_ORIGIN: http://localhost:3000
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      # Na imagem 18 o volume é /var/lib/postgresql (PGDATA fica em 18/docker abaixo dele).
+      - postgres-data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Por TCP: durante o init o servidor temporário só escuta no socket, então
+      # o healthcheck só passa depois que o script de inicialização terminou.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U chat -d chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:

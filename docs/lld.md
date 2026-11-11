@@ -1,6 +1,6 @@
 # LLD — Full Cycle Chat
 
-2026-11-09 · Luiz Carlos · Status: rascunho · HLD: [hld.md](hld.md)
+2026-11-10 · Luiz Carlos · Status: rascunho · HLD: [hld.md](hld.md)
 
 **Onde mora cada fato**
 
@@ -18,7 +18,7 @@
 | Schema do Banco do chat | `apps/chat-api/migrations/`, migrações do TypeORM (planejado) |
 | Schema do Banco dos agentes | A definir |
 | Schema do Banco de negócio | Script de carga em `apps/agents/scripts/` (planejado) |
-| Schema das variáveis de ambiente | O schema zod do módulo de configuração de cada projeto TypeScript (`apps/chat-api/src/config/env.schema.ts` existe; o da `web` é planejado); do projeto `agents`, a definir |
+| Schema das variáveis de ambiente | O schema zod do módulo de configuração de cada projeto TypeScript (`apps/chat-api/src/config/env.schema.ts` e o da `web`, planejados); do projeto `agents`, a definir |
 | Práticas e comandos | `apps/*/AGENTS.md`, um por app, apontados pelo `AGENTS.md` da raiz (planejado) |
 
 Os snapshots OpenAPI ficam gravados no repositório, e a CI falha quando o código muda o contrato
@@ -37,7 +37,7 @@ apps/
   web/            Frontend/BFF (Next.js)                              existe
   chat-api/       API do chat (NestJS): REST, WebSocket e o comando   existe
                   de contas e permissões (HLD, seção 2)
-    migrations/   migrações do Banco do chat                          existe
+    migrations/   migrações do Banco do chat                          planejada
   agents/         Serviço de agentes e Worker (Python + ADK),         planejada
                   dois processos do mesmo projeto
     scripts/      script de carga do Banco de negócio                 planejada
@@ -431,7 +431,8 @@ atualiza esse cache direto, sem nova requisição.
 **Variáveis de ambiente**
 
 O que cada contêiner recebe está no HLD, seção 8, "Configuração e segredos". As já decididas
-(`DATABASE_URL` e `PORT` da API do chat já existem; as demais são `planejadas`):
+(`PORT` da API do chat já existe; as demais são `planejadas`, e as de valor fixo no local já
+estão no `environment:` de cada serviço do `compose.yaml`):
 
 | Projeto | Variável | Para quê |
 | --- | --- | --- |
@@ -456,11 +457,13 @@ substitui cada serviço de produção segue o HLD, seção 9, "Implantação e a
 | `web` | `apps/web/Dockerfile.dev` (Node 26, pnpm 11) | 3000 | Frontend/BFF |
 | `chat-api` | `apps/chat-api/Dockerfile.dev` (Node 26, pnpm 11) | 3001 (3000 no contêiner) | API do chat |
 | `postgres` | `postgres:18` | 5432 | Banco do chat, dos agentes e de negócio |
-| `s3` | `chrislusf/seaweedfs:4.52` (`weed mini`) | 8333 | Substituto do armazenamento compatível com S3, com o bucket `reports` |
+| `s3` (planejado) | `chrislusf/seaweedfs:4.52` (`weed mini`) | 8333 | Substituto do armazenamento compatível com S3, com o bucket `reports` |
 | `e2e` (planejado) | Imagem oficial do Playwright, na mesma versão do `@playwright/test` do `web` | — | Roda os testes de ponta a ponta do `web` contra `http://web:3000` e o `playwright-cli`; sobe só pelo `profile` e fica parado, como `web` e `chat-api` |
 
-Entram depois: o Redis, quando o primeiro uso dele for implementado, e os serviços `agents` e
-`worker`, quando `apps/agents` existir.
+Um serviço de apoio entra no compose quando o primeiro uso dele for implementado: o `s3` com o
+Worker ou a URL assinada do PDF, e o Redis com a fila, os eventos de reconexão ou os contadores.
+Os serviços `agents` e `worker` entram quando `apps/agents` existir, e o `e2e` quando o `web`
+tiver o `@playwright/test`.
 
 **Contêineres dos apps**
 
@@ -470,17 +473,28 @@ Entram depois: o Redis, quando o primeiro uso dele for implementado, e os servi�
   fica em `docker compose logs`.
 - O repositório inteiro é montado em `/home/node/app`, para o `file:../../packages/chat-events`
   resolver igual dentro e fora. O `node_modules` fica no disco do host, visível para o editor.
-- Os contêineres rodam como `node` (uid 1000), o mesmo usuário do host no WSL.
+- Os contêineres rodam como `node` (uid 1000). No WSL é o mesmo usuário do host; no macOS o
+  Docker Desktop mapeia o dono dos arquivos montados, e os arquivos criados pelo contêiner
+  aparecem como do usuário do host.
 - O store do pnpm fica em `.pnpm-store/` na raiz, ignorado pelo git e compartilhado pelos dois
-  apps. A versão do pnpm é a do `packageManager` de cada projeto, igual nos dois.
-- Bindings nativos são compilados no contêiner: o Node do host precisa ser o mesmo major (26)
-  para rodar ferramentas pelo host sobre o mesmo `node_modules`.
+  apps (`storeDir` no `pnpm-workspace.yaml` de cada um). A versão do pnpm é a do
+  `packageManager` de cada projeto, igual nos dois, garantida pelo corepack instalado na imagem,
+  porque o Node 26 não o traz.
+- O `node_modules` serve ao host e ao contêiner: o `supportedArchitectures` do
+  `pnpm-workspace.yaml` de cada projeto instala os binários nativos de macOS e Linux, em arm64 e
+  x64. Sem isso, o install de um lado apagaria os binários do outro, porque o host macOS e o
+  contêiner Linux são sistemas diferentes. O Node do host precisa ser o mesmo major (26).
+- O install roda só no contêiner: o `node_modules` guarda o caminho absoluto do store, que é
+  outro no host, e um install pelo host refaria o `node_modules` inteiro.
 
 **Postgres.** O script `docker/postgres/init/01-create-databases.sh` roda só com o volume vazio
 e cria os bancos `chat`, `agents` e `business`, cada um com um usuário dono de mesmo nome, e o
 usuário `business_readonly`, que só conecta no `business` e só lê, inclusive as tabelas que o
 script de carga criar depois ([ADR 0013](adr/0013-somente-leitura-banco-e-codigo.md)). Nenhum
-usuário conecta num banco que não é o seu. Senhas iguais ao nome do usuário, só locais.
+usuário conecta num banco que não é o seu. Senhas iguais ao nome do usuário, só locais. A
+leitura das tabelas futuras vale para as que o papel `business` criar no schema `public`. Os
+apps só sobem depois que o healthcheck do Postgres passa por TCP, o que só acontece depois do
+script de inicialização.
 
 **Diferenças do ambiente local que mudam o código**
 
